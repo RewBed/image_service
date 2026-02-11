@@ -1,0 +1,50 @@
+// prisma/schema.prisma
+
+generator client {
+    provider      = "prisma-client"
+    output        = "../generated/prisma"
+    moduleFormat  = "cjs"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+model Image {
+    id            String   @id @default(uuid())
+    externalId    String   @unique
+
+    entityType    String?
+    entityId      String?
+    imageType     String?
+
+    // Где лежит файл
+    storage       ImageStorageType
+    bucket        String?          // для S3
+    path          String @db.VarChar(2048)  
+
+    // Метаданные
+    originalName  String
+    mimeType      String
+    extension     String
+    size          Int              // в байтах
+
+    width         Int?
+    height        Int?
+
+    // Дополнительное
+    isPublic      Boolean  @default(false)
+    checksum      String?  // md5 или sha256
+
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+    deletedAt     DateTime?
+
+    @@index([createdAt])
+}
+
+enum ImageStorageType {
+    LOCAL
+    S3
+    MINIO
+}

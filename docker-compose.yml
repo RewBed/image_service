@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:18
+    container_name: ${SERVICE_NAME}_postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${NAT_POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - shop-net-v1
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ${SERVICE_NAME}
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${SERVICE_PORT}:${SERVICE_PORT}"
+      - "${GRPC_PORT}:${GRPC_PORT}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate deploy && node dist/src/main.js"
+    environment:
+      - VIRTUAL_HOST=${AUTO_SSL_VIRTUAL_HOST}
+      - LETSENCRYPT_HOST=${AUTO_SSL_LETSENCRYPT_HOST}
+      - LETSENCRYPT_EMAIL=${AUTO_SSL_LETSENCRYPT_EMAIL}
+      - VIRTUAL_PORT=${AUTO_SSL_VIRTUAL_PORT}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - shop-net-v1
+
+volumes:
+  postgres_data:
+
+networks:
+  shop-net-v1:
+    name: shop-net-v1
+    driver: bridge
