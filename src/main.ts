@@ -24,6 +24,9 @@ async function bootstrap() {
             package: 'health',
             protoPath: join(process.cwd(), 'grpc/proto/health.proto'),
             url: `0.0.0.0:${configService.get<number>('GRPC_PORT')}`,
+            loader: {
+                keepCase: false, // snake_case -> camelCase
+            },
         },
     });
 

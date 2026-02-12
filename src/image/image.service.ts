@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from 'src/core/database/prisma.service';
 
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { extname, dirname, basename, join } from 'path';
 import * as fs from 'fs';
 import * as util from 'util';
@@ -14,7 +15,11 @@ const writeFile = util.promisify(fs.writeFile);
 
 @Injectable()
 export class ImageService {
-    constructor(private prisma: PrismaService) {}
+    constructor(
+        private readonly prisma: PrismaService,
+        private readonly configService: ConfigService,
+    ) {}
+
     private readonly unsupportedWebMimeTypes = ['image/gif', 'image/svg+xml'];
 
     async getImageByExternalId(externalId: string): Promise<Image | null> {
@@ -61,76 +66,107 @@ export class ImageService {
             .webp({ quality: 80 })
             .toFile(webPath);
 
-        console.log(webPath);
-
         return webPath;
     }
 
-    async uploadImage(file: Express.Multer.File, dto: UploadImageDto) : Promise<ImageDto> {
+    async uploadImage(file: Express.Multer.File, dto: UploadImageDto): Promise<ImageDto> {
         const { entityType, entityId, imageType } = dto;
 
         if (!file) {
             throw new Error('File is required');
         }
 
-        // Разрешённые MIME-типы изображений
         const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml'];
         if (!allowedMimeTypes.includes(file.mimetype)) {
             throw new Error('Only image files are allowed');
         }
 
-        // Генерация безопасного внешнего ключа
-        const externalId = randomBytes(36).toString('hex'); // 48 символов
+        const externalId = randomBytes(36).toString('hex');
 
-        // Метаданные файла
         const extension = extname(file.originalname).replace('.', '').toLowerCase();
         const mimeType = file.mimetype;
         const size = file.size;
 
-        // Получаем размеры изображения, если это картинка
         let width: number | null = null;
         let height: number | null = null;
+
         try {
-        const metadata = await sharp(file.buffer).metadata();
+            const metadata = await sharp(file.buffer).metadata();
             width = metadata.width ?? null;
             height = metadata.height ?? null;
-        } catch (err) {
-            // если не изображение, оставляем null
+        } catch {
+            width = null;
+            height = null;
         }
 
-        // Локальное хранилище
         const storageFolder = `./uploads/${entityType}/${entityId}`;
-        if (!fs.existsSync(storageFolder)) fs.mkdirSync(storageFolder, { recursive: true });
+        if (!fs.existsSync(storageFolder)) {
+            fs.mkdirSync(storageFolder, { recursive: true });
+        }
+
         const fileName = `${externalId}.${extension}`;
         const filePath = `${storageFolder}/${fileName}`;
         await writeFile(filePath, file.buffer);
 
-        // Вычисляем checksum (md5)
-        const checksum = require('crypto').createHash('md5').update(file.buffer).digest('hex');
+        const checksum = createHash('md5').update(file.buffer).digest('hex');
+        const topic = this.configService.get<string>('KAFKA_TOPIC_IMAGE_UPLOADED', 'image.uploaded');
 
-        // Создаем запись в базе
-        const image = await this.prisma.image.create({
-            data: {
-                externalId,
-                entityType,
-                entityId,
-                imageType,
-                storage: 'LOCAL', // локальное хранение
-                path: filePath,
-                originalName: file.originalname,
-                mimeType,
-                extension,
-                size,
-                width,
-                height,
-                checksum,
-                isPublic: false,
-            },
+        const image = await this.prisma.$transaction(async (tx) => {
+            const createdImage = await tx.image.create({
+                data: {
+                    externalId,
+                    entityType,
+                    entityId,
+                    imageType,
+                    storage: 'LOCAL',
+                    path: filePath,
+                    originalName: file.originalname,
+                    mimeType,
+                    extension,
+                    size,
+                    width,
+                    height,
+                    checksum,
+                    isPublic: false,
+                },
+            });
+
+            await tx.outboxEvent.create({
+                data: {
+                    topic,
+                    key: createdImage.externalId,
+                    eventType: 'image.uploaded',
+                    eventVersion: 1,
+                    payload: {
+                        eventId: randomBytes(16).toString('hex'),
+                        eventType: 'image.uploaded',
+                        eventVersion: 1,
+                        occurredAt: new Date().toISOString(),
+                        data: {
+                            externalId: createdImage.externalId,
+                            entityType: createdImage.entityType,
+                            entityId: createdImage.entityId,
+                            imageType: createdImage.imageType,
+                            originalName: createdImage.originalName,
+                            mimeType: createdImage.mimeType,
+                            extension: createdImage.extension,
+                            size: createdImage.size,
+                            width: createdImage.width,
+                            height: createdImage.height,
+                            storage: createdImage.storage,
+                            path: createdImage.path,
+                            checksum: createdImage.checksum,
+                            createdAt: createdImage.createdAt.toISOString(),
+                        },
+                    },
+                },
+            });
+
+            return createdImage;
         });
 
         return {
-            externalId: image.externalId
+            externalId: image.externalId,
         };
     }
 }
-

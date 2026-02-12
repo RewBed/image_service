@@ -4,6 +4,7 @@ import { DatabaseModule } from './core/database/database.module';
 import { HealthModule } from './health/health.module';
 import { LoggerModule } from './core/logger/logger.module';
 import { ImageModule } from './image/image.module';
+import { OutboxModule } from './core/outbox/outbox.module';
 
 @Module({
     imports: [
@@ -11,7 +12,8 @@ import { ImageModule } from './image/image.module';
         DatabaseModule, 
         HealthModule, 
         LoggerModule, 
-        ImageModule
+        ImageModule,
+        OutboxModule,
     ],
     controllers: [],
     providers: [],

@@ -143,4 +143,6 @@ docker compose up -d
 - Always make sure `DATABASE_URL` in `.env` points to the correct database.
 - gRPC port must be available locally (`50051`) for development testing.
 - For production, configure proper ports and TLS if needed.
-
+- Image upload now writes an `image.uploaded` event to DB outbox in the same transaction and publishes it to Kafka asynchronously.
+- To enable publisher set `KAFKA_ENABLED=true` and configure `KAFKA_BROKERS`.
+- For secured Kafka, set `KAFKA_USERNAME` and `KAFKA_PASSWORD` (optionally `KAFKA_SASL_MECHANISM` and `KAFKA_SSL=true`).

@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Body, Get, Param, Res, NotFoundException } from '@nestjs/common';
+import { Controller, Post, UploadedFile, UseInterceptors, Body, Get, Param, Res, NotFoundException, UseGuards } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImageService } from './image.service';
 import { UploadImageDto } from './dto/upload.image.dto';
@@ -6,6 +6,7 @@ import express from 'express';
 import * as fs from 'fs';
 import { ImageDto } from './dto/image.dto';
 import { ApiOkResponse } from '@nestjs/swagger';
+import { GrpcAuthGuard } from 'src/common/guards/grpc-auth.guard';
 
 @Controller('images')
 export class ImageController {
@@ -13,6 +14,7 @@ export class ImageController {
 
     @Post('upload')
     @ApiOkResponse({ type: ImageDto })
+    @UseGuards(GrpcAuthGuard)
     @UseInterceptors(FileInterceptor('file'))
     async upload(@UploadedFile() file: Express.Multer.File, @Body() body: UploadImageDto): Promise<ImageDto> {        
         return await this.imageService.uploadImage(file, body);
