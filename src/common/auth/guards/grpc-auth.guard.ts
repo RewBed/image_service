@@ -10,6 +10,7 @@ import {
 import type { ClientGrpc } from '@nestjs/microservices';
 import { Request } from 'express';
 import { firstValueFrom, Observable, timeout } from 'rxjs';
+import { AUTH_SERVICE_GRPC } from '../constants/auth.tokens';
 
 interface VerifyAccessTokenRequest {
     accessToken: string;
@@ -39,7 +40,7 @@ type AuthenticatedRequest = Request & {
 export class GrpcAuthGuard implements CanActivate, OnModuleInit {
     private authService!: AuthServiceGrpc;
 
-    constructor(@Inject('AUTH_SERVICE_GRPC') private readonly authClient: ClientGrpc) {}
+    constructor(@Inject(AUTH_SERVICE_GRPC) private readonly authClient: ClientGrpc) {}
 
     onModuleInit(): void {
         this.authService = this.authClient.getService<AuthServiceGrpc>('AuthService');

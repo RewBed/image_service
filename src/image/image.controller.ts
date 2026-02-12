@@ -6,7 +6,7 @@ import express from 'express';
 import * as fs from 'fs';
 import { ImageDto } from './dto/image.dto';
 import { ApiOkResponse } from '@nestjs/swagger';
-import { GrpcAuthGuard } from 'src/common/guards/grpc-auth.guard';
+import { GrpcAuthGuard } from 'src/common/auth';
 
 @Controller('images')
 export class ImageController {
