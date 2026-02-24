@@ -1,14 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString } from 'class-validator';
 
-export class UploadImageDto {
-    @ApiProperty()
-    @IsString()
-    entityType: string;
-
-    @ApiProperty()
-    @IsString()
-    entityId: string;
+export class UpdateImageDto {
 
     @ApiProperty()
     @IsString()

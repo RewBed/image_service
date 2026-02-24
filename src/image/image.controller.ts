@@ -1,4 +1,4 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Body, Get, Param, Res, NotFoundException, UseGuards } from '@nestjs/common';
+import { Controller, Post, UploadedFile, UseInterceptors, Body, Get, Param, Res, NotFoundException, UseGuards, Delete, Patch } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ImageService } from './image.service';
 import { UploadImageDto } from './dto/upload.image.dto';
@@ -7,8 +7,9 @@ import * as fs from 'fs';
 import { ImageDto } from './dto/image.dto';
 import { ApiOkResponse } from '@nestjs/swagger';
 import { GrpcAuthGuard } from 'src/common/auth';
+import { UpdateImageDto } from './dto/update.image.dto';
 
-@Controller('images')
+@Controller('api/images')
 export class ImageController {
   constructor(private readonly imageService: ImageService) {}
 
@@ -36,5 +37,30 @@ export class ImageController {
 
         const stream = fs.createReadStream(filePath);
         stream.pipe(res);
+    }
+
+    @Delete(':externalId')
+    @UseGuards(GrpcAuthGuard)
+    async deleteByExternalId(@Param('externalId') externalId: string): Promise<ImageDto> {
+        const image = await this.imageService.markImageDeleted(externalId);
+
+        if (!image) {
+            throw new NotFoundException('Image not found');
+        }
+
+        return { externalId: image.externalId };
+    }
+
+    @Patch(':externalId')
+    @UseGuards(GrpcAuthGuard)
+    @ApiOkResponse({ type: ImageDto })
+    async updateByExternalId(@Param('externalId') externalId: string, @Body() body: UpdateImageDto): Promise<ImageDto> {
+        const image = await this.imageService.updateImageByExternalId(externalId, body);
+
+        if (!image) {
+            throw new NotFoundException('Image not found');
+        }
+
+        return { externalId: image.externalId };
     }
 }

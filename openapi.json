@@ -72,7 +72,7 @@
         ]
       }
     },
-    "/images/upload": {
+    "/api/images/upload": {
       "post": {
         "operationId": "ImageController_upload",
         "parameters": [],
@@ -103,7 +103,7 @@
         ]
       }
     },
-    "/images/{externalId}": {
+    "/api/images/{externalId}": {
       "get": {
         "operationId": "ImageController_getByExternalId",
         "parameters": [
@@ -119,6 +119,65 @@
         "responses": {
           "200": {
             "description": ""
+          }
+        },
+        "tags": [
+          "Image"
+        ]
+      },
+      "delete": {
+        "operationId": "ImageController_deleteByExternalId",
+        "parameters": [
+          {
+            "name": "externalId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Image"
+        ]
+      },
+      "patch": {
+        "operationId": "ImageController_updateByExternalId",
+        "parameters": [
+          {
+            "name": "externalId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateImageDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDto"
+                }
+              }
+            }
           }
         },
         "tags": [
@@ -196,7 +255,22 @@
       },
       "UploadImageDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "imageType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entityType",
+          "entityId",
+          "imageType"
+        ]
       },
       "ImageDto": {
         "type": "object",
@@ -207,6 +281,17 @@
         },
         "required": [
           "externalId"
+        ]
+      },
+      "UpdateImageDto": {
+        "type": "object",
+        "properties": {
+          "imageType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "imageType"
         ]
       }
     }

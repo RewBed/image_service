@@ -9,6 +9,7 @@ import * as util from 'util';
 import sharp from 'sharp';
 import { UploadImageDto } from './dto/upload.image.dto';
 import { ImageDto } from './dto/image.dto';
+import { UpdateImageDto } from './dto/update.image.dto';
 import { Image } from 'generated/prisma/client';
 
 const writeFile = util.promisify(fs.writeFile);
@@ -168,5 +169,40 @@ export class ImageService {
         return {
             externalId: image.externalId,
         };
+    }
+
+    async markImageDeleted(externalId: string): Promise<Image | null> {
+        const image = await this.prisma.image.findUnique({
+            where: { externalId },
+        });
+
+        if (!image || image.deletedAt) {
+            return null;
+        }
+
+        return await this.prisma.image.update({
+            where: { externalId },
+            data: {
+                deletedAt: new Date(),
+                isPublic: false,
+            },
+        });
+    }
+
+    async updateImageByExternalId(externalId: string, dto: UpdateImageDto): Promise<Image | null> {
+        const image = await this.prisma.image.findUnique({
+            where: { externalId },
+        });
+
+        if (!image || image.deletedAt) {
+            return null;
+        }
+
+        return await this.prisma.image.update({
+            where: { externalId },
+            data: {
+                imageType: dto.imageType,
+            },
+        });
     }
 }
