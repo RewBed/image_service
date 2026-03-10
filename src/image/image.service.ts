@@ -196,19 +196,48 @@ export class ImageService {
     }
 
     async updateImageByExternalId(externalId: string, dto: UpdateImageDto): Promise<Image | null> {
-        const image = await this.prisma.image.findUnique({
-            where: { externalId },
-        });
+        const topic = this.configService.get<string>('KAFKA_TOPIC_IMAGE_UPDATED', 'image.updated');
 
-        if (!image || image.deletedAt) {
-            return null;
-        }
+        return await this.prisma.$transaction(async (tx) => {
+            const image = await tx.image.findUnique({
+                where: { externalId },
+            });
 
-        return await this.prisma.image.update({
-            where: { externalId },
-            data: {
-                imageType: dto.imageType,
-            },
+            if (!image || image.deletedAt) {
+                return null;
+            }
+
+            const updatedImage = await tx.image.update({
+                where: { externalId },
+                data: {
+                    imageType: dto.imageType,
+                },
+            });
+
+            await tx.outboxEvent.create({
+                data: {
+                    topic,
+                    key: updatedImage.externalId,
+                    eventType: 'image.updated',
+                    eventVersion: 1,
+                    payload: {
+                        eventId: randomBytes(16).toString('hex'),
+                        eventType: 'image.updated',
+                        eventVersion: 1,
+                        occurredAt: new Date().toISOString(),
+                        data: {
+                            externalId: updatedImage.externalId,
+                            entityType: updatedImage.entityType,
+                            entityId: updatedImage.entityId,
+                            previousImageType: image.imageType,
+                            imageType: updatedImage.imageType,
+                            updatedAt: updatedImage.updatedAt.toISOString(),
+                        },
+                    },
+                },
+            });
+
+            return updatedImage;
         });
     }
 }
