@@ -35,6 +35,12 @@ export class ImageService {
         return image;
     }
 
+    async getImageForAdminByExternalId(externalId: string): Promise<Image | null> {
+        return await this.prisma.image.findUnique({
+            where: { externalId },
+        });
+    }
+
     getWebImagePath(imagePath: string): string {
         const dir = dirname(imagePath);
         const originalBaseName = basename(imagePath, extname(imagePath));
