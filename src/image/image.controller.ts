@@ -1,32 +1,44 @@
-import { Controller, Post, UploadedFile, UseInterceptors, Body, Get, Param, Res, NotFoundException, UseGuards, Delete, Patch } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { Controller, Get, Param, Res, NotFoundException } from '@nestjs/common';
 import { ImageService } from './image.service';
-import { UploadImageDto } from './dto/upload.image.dto';
 import express from 'express';
 import * as fs from 'fs';
-import { ImageDto } from './dto/image.dto';
-import { ApiOkResponse } from '@nestjs/swagger';
-import { GrpcAuthGuard } from 'src/common/auth';
-import { UpdateImageDto } from './dto/update.image.dto';
+import {
+    ApiBadRequestResponse,
+    ApiNotFoundResponse,
+    ApiOperation,
+    ApiParam,
+    ApiProduces,
+    ApiTags,
+} from '@nestjs/swagger';
 
+@ApiTags('Images')
 @Controller('api/images')
 export class ImageController {
-  constructor(private readonly imageService: ImageService) {}
-
-    @Post('upload')
-    @ApiOkResponse({ type: ImageDto })
-    @UseGuards(GrpcAuthGuard)
-    @UseInterceptors(FileInterceptor('file'))
-    async upload(@UploadedFile() file: Express.Multer.File, @Body() body: UploadImageDto): Promise<ImageDto> {        
-        return await this.imageService.uploadImage(file, body);
-    }
+    constructor(private readonly imageService: ImageService) {}
 
     @Get(':externalId')
-    async getByExternalId(@Param('externalId') externalId: string, @Res() res: express.Response) {
+    @ApiOperation({
+        summary: 'Download image file by externalId',
+        description:
+            'Returns binary image file by externalId. If possible, serves generated web version (webp).',
+    })
+    @ApiParam({
+        name: 'externalId',
+        required: true,
+        description: 'Image external identifier',
+    })
+    @ApiProduces('image/webp', 'image/jpeg', 'image/png', 'image/gif', 'image/svg+xml')
+    @ApiNotFoundResponse({ description: 'Image file not found' })
+    @ApiBadRequestResponse({ description: 'Invalid externalId' })
+    async downloadByExternalId(
+        @Param('externalId') externalId: string,
+        @Res() res: express.Response,
+    ) {
         const image = await this.imageService.getImageByExternalId(externalId);
-        
-        if(!image || !fs.existsSync(image.path))
+
+        if (!image || !fs.existsSync(image.path)) {
             throw new NotFoundException('Image file not found');
+        }
 
         const webPath = await this.imageService.ensureWebVersion(image);
         const filePath = webPath ?? image.path;
@@ -37,30 +49,5 @@ export class ImageController {
 
         const stream = fs.createReadStream(filePath);
         stream.pipe(res);
-    }
-
-    @Delete(':externalId')
-    @UseGuards(GrpcAuthGuard)
-    async deleteByExternalId(@Param('externalId') externalId: string): Promise<ImageDto> {
-        const image = await this.imageService.markImageDeleted(externalId);
-
-        if (!image) {
-            throw new NotFoundException('Image not found');
-        }
-
-        return { externalId: image.externalId };
-    }
-
-    @Patch(':externalId')
-    @UseGuards(GrpcAuthGuard)
-    @ApiOkResponse({ type: ImageDto })
-    async updateByExternalId(@Param('externalId') externalId: string, @Body() body: UpdateImageDto): Promise<ImageDto> {
-        const image = await this.imageService.updateImageByExternalId(externalId, body);
-
-        if (!image) {
-            throw new NotFoundException('Image not found');
-        }
-
-        return { externalId: image.externalId };
     }
 }

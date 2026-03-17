@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Kafka, Producer } from 'kafkajs';
+import { Admin, Kafka, Producer } from 'kafkajs';
 import { OutboxStatus, Prisma } from 'generated/prisma/client';
 import { PrismaService } from '../database/prisma.service';
 
@@ -19,10 +19,13 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
     private readonly pollIntervalMs: number;
     private readonly batchSize: number;
     private readonly maxAttempts: number;
+    private readonly topicCacheTtlMs = 30_000;
 
     private producer: Producer | null = null;
+    private admin: Admin | null = null;
     private intervalHandle: NodeJS.Timeout | null = null;
     private isPublishing = false;
+    private readonly topicExistenceCache = new Map<string, { exists: boolean; expiresAt: number }>();
 
     constructor(
         private readonly prisma: PrismaService,
@@ -79,8 +82,10 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         this.producer = kafka.producer({
             allowAutoTopicCreation: false,
         });
+        this.admin = kafka.admin();
 
         await this.producer.connect();
+        await this.admin.connect();
 
         this.intervalHandle = setInterval(() => {
             void this.publishPendingEvents();
@@ -101,6 +106,11 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
         if (this.producer) {
             await this.producer.disconnect();
             this.producer = null;
+        }
+
+        if (this.admin) {
+            await this.admin.disconnect();
+            this.admin = null;
         }
     }
 
@@ -151,6 +161,15 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
             return;
         }
 
+        const topicExists = await this.topicExists(event.topic);
+        if (!topicExists) {
+            await this.handlePublishFailure(
+                event,
+                new Error(`Kafka topic "${event.topic}" does not exist`),
+            );
+            return;
+        }
+
         try {
             await this.producer.send({
                 topic: event.topic,
@@ -171,20 +190,53 @@ export class OutboxPublisherService implements OnModuleInit, OnModuleDestroy {
                 },
             });
         } catch (error) {
-            const nextAttempts = event.attempts + 1;
-            const reachedMaxAttempts = nextAttempts >= this.maxAttempts;
+            await this.handlePublishFailure(event, error);
+        }
+    }
 
-            await this.prisma.outboxEvent.update({
-                where: { id: event.id },
-                data: {
-                    status: reachedMaxAttempts ? OutboxStatus.FAILED : OutboxStatus.PENDING,
-                    attempts: { increment: 1 },
-                    nextAttemptAt: this.calculateNextAttemptAt(nextAttempts),
-                    lastError: this.stringifyError(error),
-                },
+    private async handlePublishFailure(event: ClaimedOutboxEvent, error: unknown): Promise<void> {
+        const nextAttempts = event.attempts + 1;
+        const reachedMaxAttempts = nextAttempts >= this.maxAttempts;
+
+        await this.prisma.outboxEvent.update({
+            where: { id: event.id },
+            data: {
+                status: reachedMaxAttempts ? OutboxStatus.FAILED : OutboxStatus.PENDING,
+                attempts: { increment: 1 },
+                nextAttemptAt: this.calculateNextAttemptAt(nextAttempts),
+                lastError: this.stringifyError(error),
+            },
+        });
+
+        this.logger.warn(`Failed to publish outbox event ${event.id}: ${this.stringifyError(error)}`);
+    }
+
+    private async topicExists(topic: string): Promise<boolean> {
+        if (!this.admin) {
+            return true;
+        }
+
+        const now = Date.now();
+        const cached = this.topicExistenceCache.get(topic);
+        if (cached && cached.expiresAt > now) {
+            return cached.exists;
+        }
+
+        try {
+            const topics = await this.admin.listTopics();
+            const exists = topics.includes(topic);
+
+            this.topicExistenceCache.set(topic, {
+                exists,
+                expiresAt: now + this.topicCacheTtlMs,
             });
 
-            this.logger.warn(`Failed to publish outbox event ${event.id}: ${this.stringifyError(error)}`);
+            return exists;
+        } catch (error) {
+            this.logger.warn(
+                `Failed to verify kafka topic "${topic}", publish will be attempted anyway: ${this.stringifyError(error)}`,
+            );
+            return true;
         }
     }
 

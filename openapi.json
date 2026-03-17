@@ -72,20 +72,208 @@
         ]
       }
     },
-    "/api/images/upload": {
+    "/api/images/{externalId}": {
+      "get": {
+        "description": "Returns binary image file by externalId. If possible, serves generated web version (webp).",
+        "operationId": "ImageController_downloadByExternalId",
+        "parameters": [
+          {
+            "name": "externalId",
+            "required": true,
+            "in": "path",
+            "description": "Image external identifier",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid externalId"
+          },
+          "404": {
+            "description": "Image file not found"
+          }
+        },
+        "summary": "Download image file by externalId",
+        "tags": [
+          "Images"
+        ]
+      }
+    },
+    "/api/admin/images/by-ids": {
       "post": {
-        "operationId": "ImageController_upload",
+        "description": "Accepts an array of internal image UUIDs and returns full metadata for each image in the same order. Deleted images are also returned if ids exist.",
+        "operationId": "ImageAdminController_getImagesByIds",
         "parameters": [],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/UploadImageDto"
+                "$ref": "#/components/schemas/GetImagesByIdsDto"
               }
             }
           }
         },
+        "responses": {
+          "200": {
+            "description": "Full image metadata for all requested ids",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImageDto"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or one of ids has invalid UUID format"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "One or more images were not found by provided ids"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get full image metadata by internal ids (admin)",
+        "tags": [
+          "Image Admin"
+        ]
+      }
+    },
+    "/api/admin/images/{topic}": {
+      "post": {
+        "description": "Uploads image to selected topic, stores image metadata, and writes outbox event {topic}.image.uploaded. Topic must be pre-registered in image topic registry.",
+        "operationId": "ImageAdminController_upload",
+        "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Kafka topic/domain context for image",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "file",
+                  "entityType",
+                  "entityId"
+                ],
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "Image file"
+                  },
+                  "entityType": {
+                    "type": "string",
+                    "description": "Domain entity type",
+                    "example": "catalog.product"
+                  },
+                  "entityId": {
+                    "type": "string",
+                    "description": "Domain entity id",
+                    "example": "123"
+                  },
+                  "imageType": {
+                    "type": "string",
+                    "description": "Image role/type in entity",
+                    "example": "main"
+                  },
+                  "title": {
+                    "type": "string",
+                    "description": "Image title",
+                    "example": "Category banner"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Image description",
+                    "example": "Hero banner for category page"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Full image metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid topic, missing file, invalid mime type, or invalid body fields"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured in image topic registry"
+          },
+          "409": {
+            "description": "Topic exists but upload event is disabled for it"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Upload image to topic (admin)",
+        "tags": [
+          "Image Admin"
+        ]
+      }
+    },
+    "/api/admin/images/{topic}/{externalId}": {
+      "get": {
+        "description": "Returns full image metadata in selected topic. Topic must exist in image topic registry.",
+        "operationId": "ImageAdminController_getImageByExternalId",
+        "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Image topic",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          },
+          {
+            "name": "externalId",
+            "required": true,
+            "in": "path",
+            "description": "Image external id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "",
@@ -96,63 +284,46 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid topic or externalId"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured or image not found"
           }
         },
-        "tags": [
-          "Image"
-        ]
-      }
-    },
-    "/api/images/{externalId}": {
-      "get": {
-        "operationId": "ImageController_getByExternalId",
-        "parameters": [
+        "security": [
           {
-            "name": "externalId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
+            "bearer": []
           }
         ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
+        "summary": "Get image metadata by topic and externalId (admin)",
         "tags": [
-          "Image"
-        ]
-      },
-      "delete": {
-        "operationId": "ImageController_deleteByExternalId",
-        "parameters": [
-          {
-            "name": "externalId",
-            "required": true,
-            "in": "path",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "tags": [
-          "Image"
+          "Image Admin"
         ]
       },
       "patch": {
-        "operationId": "ImageController_updateByExternalId",
+        "description": "Updates image metadata (imageType/title/description) and creates outbox event {topic}.image.updated. Topic must be pre-registered in image topic registry.",
+        "operationId": "ImageAdminController_updateByExternalId",
         "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Image topic",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          },
           {
             "name": "externalId",
             "required": true,
             "in": "path",
+            "description": "Image external id",
             "schema": {
               "type": "string"
             }
@@ -170,7 +341,7 @@
         },
         "responses": {
           "200": {
-            "description": "",
+            "description": "Image metadata after update",
             "content": {
               "application/json": {
                 "schema": {
@@ -178,10 +349,269 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "Invalid topic, externalId, or request body"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured or image not found"
+          },
+          "409": {
+            "description": "Topic exists but update event is disabled for it"
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update image metadata by topic and externalId (admin)",
         "tags": [
-          "Image"
+          "Image Admin"
+        ]
+      },
+      "delete": {
+        "description": "Marks image as deleted and creates outbox event {topic}.image.deleted. Topic must be pre-registered in image topic registry.",
+        "operationId": "ImageAdminController_deleteByExternalId",
+        "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Image topic",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          },
+          {
+            "name": "externalId",
+            "required": true,
+            "in": "path",
+            "description": "Image external id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Image metadata after soft-delete",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid topic or externalId"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured or image not found"
+          },
+          "409": {
+            "description": "Topic exists but delete event is disabled for it"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Soft-delete image by topic and externalId (admin)",
+        "tags": [
+          "Image Admin"
+        ]
+      }
+    },
+    "/api/admin/image-topics": {
+      "get": {
+        "description": "Returns all topics registered in image service. Only active configured topics can be used in image upload, update and delete endpoints.",
+        "operationId": "ImageTopicAdminController_findAll",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Configured image topics",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImageTopicDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "List configured image topics",
+        "tags": [
+          "Image Topic Admin"
+        ]
+      },
+      "post": {
+        "description": "Creates a topic registry record and defines which lifecycle events are allowed for this topic.",
+        "operationId": "ImageTopicAdminController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImageTopicDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Topic successfully registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTopicDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request body or topic format"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "409": {
+            "description": "Topic already exists"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Register image topic",
+        "tags": [
+          "Image Topic Admin"
+        ]
+      }
+    },
+    "/api/admin/image-topics/{topic}": {
+      "get": {
+        "description": "Returns topic configuration used by image upload service.",
+        "operationId": "ImageTopicAdminController_findOne",
+        "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Registered Kafka topic",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Topic configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTopicDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid topic format"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Get configured image topic",
+        "tags": [
+          "Image Topic Admin"
+        ]
+      },
+      "patch": {
+        "description": "Updates topic flags and description. Disabled operations will be rejected by image endpoints with HTTP 409.",
+        "operationId": "ImageTopicAdminController_update",
+        "parameters": [
+          {
+            "name": "topic",
+            "required": true,
+            "in": "path",
+            "description": "Registered Kafka topic",
+            "schema": {
+              "example": "catalog_product",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateImageTopicDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated topic configuration",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImageTopicDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid topic format or request body"
+          },
+          "401": {
+            "description": "Valid Bearer token is required"
+          },
+          "404": {
+            "description": "Topic is not configured"
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "Update image topic configuration",
+        "tags": [
+          "Image Topic Admin"
         ]
       }
     }
@@ -195,7 +625,7 @@
   "tags": [],
   "servers": [
     {
-      "url": "http://localhost:3966"
+      "url": "http://localhost:3972"
     }
   ],
   "components": {
@@ -253,46 +683,316 @@
           "items"
         ]
       },
-      "UploadImageDto": {
+      "GetImagesByIdsDto": {
         "type": "object",
         "properties": {
-          "entityType": {
-            "type": "string"
-          },
-          "entityId": {
-            "type": "string"
-          },
-          "imageType": {
-            "type": "string"
+          "ids": {
+            "description": "Array of internal image UUIDs",
+            "example": [
+              "d7af3686-6d6d-4fb7-9b25-33b1ef2257c2",
+              "a80d92b7-f417-4294-b85d-74c134b8e6ec"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
-          "entityType",
-          "entityId",
-          "imageType"
+          "ids"
         ]
       },
       "ImageDto": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "description": "Internal image record UUID"
+          },
           "externalId": {
-            "type": "string"
+            "type": "string",
+            "description": "External image identifier"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Kafka topic where the image belongs",
+            "example": "catalog_product"
+          },
+          "entityType": {
+            "type": "string",
+            "nullable": true,
+            "example": "catalog.category",
+            "description": "Domain entity type"
+          },
+          "entityId": {
+            "type": "string",
+            "nullable": true,
+            "example": "42",
+            "description": "Domain entity identifier"
+          },
+          "imageType": {
+            "type": "string",
+            "nullable": true,
+            "example": "main",
+            "description": "Image role/type for entity"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true,
+            "example": "Category banner",
+            "description": "Image title"
+          },
+          "description": {
+            "type": "string",
+            "nullable": true,
+            "example": "Hero banner for category page",
+            "description": "Image description"
+          },
+          "storage": {
+            "type": "string",
+            "description": "Storage provider",
+            "enum": [
+              "LOCAL",
+              "S3",
+              "MINIO"
+            ]
+          },
+          "bucket": {
+            "type": "string",
+            "nullable": true,
+            "example": null,
+            "description": "Bucket name (for object storage)"
+          },
+          "path": {
+            "type": "string",
+            "description": "Physical image path"
+          },
+          "originalName": {
+            "type": "string",
+            "description": "Original uploaded filename"
+          },
+          "mimeType": {
+            "type": "string",
+            "description": "Original image MIME type"
+          },
+          "extension": {
+            "type": "string",
+            "description": "Image file extension (without dot)"
+          },
+          "size": {
+            "type": "number",
+            "description": "Image size in bytes"
+          },
+          "width": {
+            "type": "number",
+            "nullable": true,
+            "example": 1280,
+            "description": "Image width in pixels"
+          },
+          "height": {
+            "type": "number",
+            "nullable": true,
+            "example": 720,
+            "description": "Image height in pixels"
+          },
+          "isPublic": {
+            "type": "boolean",
+            "description": "Public access flag"
+          },
+          "checksum": {
+            "type": "string",
+            "nullable": true,
+            "example": "d41d8cd98f00b204e9800998ecf8427e",
+            "description": "File checksum (md5)"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-03-13T13:57:51.388Z",
+            "description": "Created timestamp"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-03-13T13:57:51.388Z",
+            "description": "Updated timestamp"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true,
+            "example": null,
+            "description": "Soft-delete timestamp"
           }
         },
         "required": [
-          "externalId"
+          "id",
+          "externalId",
+          "topic",
+          "storage",
+          "path",
+          "originalName",
+          "mimeType",
+          "extension",
+          "size",
+          "isPublic",
+          "createdAt",
+          "updatedAt"
         ]
       },
       "UpdateImageDto": {
         "type": "object",
         "properties": {
           "imageType": {
-            "type": "string"
+            "type": "string",
+            "description": "New logical image type",
+            "example": "gallery"
+          },
+          "title": {
+            "type": "string",
+            "description": "New image title",
+            "example": "Updated category banner"
+          },
+          "description": {
+            "type": "string",
+            "description": "New image description",
+            "example": "Updated hero banner for category page"
+          }
+        }
+      },
+      "ImageTopicDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Internal topic registry UUID"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Kafka topic allowed for image operations",
+            "example": "catalog_product"
+          },
+          "description": {
+            "type": "object",
+            "description": "Optional human-readable description of topic purpose",
+            "example": "Images for catalog products",
+            "nullable": true
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether topic can currently be used by image service",
+            "example": true
+          },
+          "allowUpload": {
+            "type": "boolean",
+            "description": "Whether image upload can publish {topic}.image.uploaded",
+            "example": true
+          },
+          "allowUpdate": {
+            "type": "boolean",
+            "description": "Whether image update can publish {topic}.image.updated",
+            "example": true
+          },
+          "allowDelete": {
+            "type": "boolean",
+            "description": "Whether image delete can publish {topic}.image.deleted",
+            "example": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Registry record creation timestamp",
+            "example": "2026-03-17T09:10:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Registry record update timestamp",
+            "example": "2026-03-17T09:10:00.000Z"
           }
         },
         "required": [
-          "imageType"
+          "id",
+          "topic",
+          "isActive",
+          "allowUpload",
+          "allowUpdate",
+          "allowDelete",
+          "createdAt",
+          "updatedAt"
         ]
+      },
+      "CreateImageTopicDto": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "type": "string",
+            "description": "Kafka topic allowed for image operations",
+            "example": "catalog_product"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional description of topic purpose",
+            "example": "Images for catalog products"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether topic is active and available for use",
+            "example": true,
+            "default": true
+          },
+          "allowUpload": {
+            "type": "boolean",
+            "description": "Allow upload operation and {topic}.image.uploaded event",
+            "example": true,
+            "default": true
+          },
+          "allowUpdate": {
+            "type": "boolean",
+            "description": "Allow update operation and {topic}.image.updated event",
+            "example": true,
+            "default": true
+          },
+          "allowDelete": {
+            "type": "boolean",
+            "description": "Allow delete operation and {topic}.image.deleted event",
+            "example": true,
+            "default": true
+          }
+        },
+        "required": [
+          "topic"
+        ]
+      },
+      "UpdateImageTopicDto": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "Optional description of topic purpose",
+            "example": "Images for catalog products"
+          },
+          "isActive": {
+            "type": "boolean",
+            "description": "Whether topic is active and available for use",
+            "example": true
+          },
+          "allowUpload": {
+            "type": "boolean",
+            "description": "Allow upload operation and {topic}.image.uploaded event",
+            "example": true
+          },
+          "allowUpdate": {
+            "type": "boolean",
+            "description": "Allow update operation and {topic}.image.updated event",
+            "example": true
+          },
+          "allowDelete": {
+            "type": "boolean",
+            "description": "Allow delete operation and {topic}.image.deleted event",
+            "example": true
+          }
+        }
       }
     }
   }

@@ -28,8 +28,6 @@ export const envSchema = z.object({
     KAFKA_SASL_MECHANISM: z.enum(['plain', 'scram-sha-256', 'scram-sha-512']).default('plain'),
     KAFKA_USERNAME: z.string().default(''),
     KAFKA_PASSWORD: z.string().default(''),
-    KAFKA_TOPIC_IMAGE_UPLOADED: z.string().default('image.uploaded'),
-    KAFKA_TOPIC_IMAGE_UPDATED: z.string().default('image.updated'),
     KAFKA_OUTBOX_POLL_INTERVAL_MS: z.preprocess(toOptionalNumber, z.number()).default(2000),
     KAFKA_OUTBOX_BATCH_SIZE: z.preprocess(toOptionalNumber, z.number()).default(100),
     KAFKA_OUTBOX_MAX_ATTEMPTS: z.preprocess(toOptionalNumber, z.number()).default(10),
